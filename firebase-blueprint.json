@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "WrongQuestion": {
+      "title": "Wrong Question Record",
+      "description": "A record of a wrong question, its knowledge points, and generated variations.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user who saved this." },
+        "originalQuestion": { "type": "string", "description": "The text of the original wrong question." },
+        "imageUrl": { "type": "string", "description": "Base64 encoded image of the wrong question." },
+        "options": { "type": "array", "items": { "type": "string" }, "description": "Multiple choice options if applicable." },
+        "userAnswer": { "type": "string", "description": "The answer the user originally gave." },
+        "correctAnswer": { "type": "string", "description": "The correct answer to the original question." },
+        "knowledgePoint": { "type": "string", "description": "The core knowledge point identified by AI." },
+        "variations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "question": { "type": "string" },
+              "answer": { "type": "string" },
+              "hint": { "type": "string", "description": "Bloom's style hint to guide thinking." },
+              "steps": { "type": "array", "items": { "type": "string" }, "description": "Detailed steps to solve the question." },
+              "explanation": { "type": "string", "description": "Explanation focusing on common mistakes and simplified for 2nd graders." },
+              "difficulty": { "type": "string", "enum": ["简单", "中等", "困难"] }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "originalQuestion", "knowledgePoint", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/wrongQuestions/{questionId}": {
+      "schema": "WrongQuestion",
+      "description": "Collection of wrong questions for all users."
+    }
+  }
+}

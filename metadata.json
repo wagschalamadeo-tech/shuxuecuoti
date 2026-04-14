@@ -1,0 +1,12 @@
+{
+  "name": "错题举一反三打印机",
+  "description": "全科通用错题学习工具，支持拍照识别、知识点提取、智能生成变式题及PDF打印。",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "OCR",
+    "AI Question Generation",
+    "PDF Export"
+  ]
+}

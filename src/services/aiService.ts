@@ -1,0 +1,102 @@
+import { GoogleGenAI, Type } from "@google/genai";
+import { OCRResult, Variation } from "../types";
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+export const aiService = {
+  async recognizeQuestion(base64Image: string, mimeType: string): Promise<OCRResult> {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [
+        {
+          parts: [
+            {
+              text: `你是一个专业的教育OCR助手。请识别图片中的题目内容。
+              要求：
+              1. 提取题目文本。
+              2. 如果有选项，提取选项。
+              3. 如果有用户原答案，提取出来。
+              4. 如果有标准答案，提取出来。
+              5. 判断该题目的核心知识点（例如：“一元二次方程根的判别式”、“现在完成时态”等）。
+              请以JSON格式返回。`,
+            },
+            {
+              inlineData: {
+                data: base64Image.split(",")[1],
+                mimeType: mimeType,
+              },
+            },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            text: { type: Type.STRING, description: "题目文本" },
+            options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "选项列表" },
+            userAnswer: { type: Type.STRING, description: "用户填写的答案" },
+            correctAnswer: { type: Type.STRING, description: "标准答案" },
+            knowledgePoint: { type: Type.STRING, description: "核心知识点" },
+          },
+          required: ["text", "knowledgePoint"],
+        },
+      },
+    });
+
+    return JSON.parse(response.text || "{}") as OCRResult;
+  },
+
+  async generateVariations(originalQuestion: string, knowledgePoint: string): Promise<Variation[]> {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [
+        {
+          parts: [
+            {
+              text: `基于以下原题和知识点，生成3道“举一反三”的变式题。
+              原题：${originalQuestion}
+              知识点：${knowledgePoint}
+              
+              要求：
+              1. 3道题的难度分别为：简单、中等、困难。
+              2. 变式题应覆盖同一知识点的不同角度。
+              3. 每道题必须包含：
+                 - question: 题目内容。
+                 - explanation: 小助手讲解（即思路引导）。要求：
+                   - 采用布鲁姆引导式：不要直接给过程，而是引导思考（例如：“第一步我们要先求出总数，第二步再求出剩下的部分”）。
+                   - 明确指出这道题的“陷阱”或“难点”在哪里。
+                   - 总结出一套“模版流程”，让小朋友遇到类似题可以直接套用。
+                   - **格式极其重要：每一句话结束（如句号、问号、感叹号后）必须立即使用 \n 换行，绝对不允许两句话连在同一行。**
+                   - 语言风格：专业、清晰、不口语化，严格符合小学二年级认知水平。
+                 - steps: 具体的解题步骤。在每一步骤之前，必须先解释“为什么要这么做”（即解题逻辑和原因），然后再给出具体的计算或操作。
+                 - answer: 最终正确答案。
+                 - difficulty: 难度等级。
+              请以JSON格式返回。`,
+            },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING, description: "变式题题目" },
+              answer: { type: Type.STRING, description: "最终答案" },
+              steps: { type: Type.ARRAY, items: { type: Type.STRING }, description: "具体的解题步骤" },
+              explanation: { type: Type.STRING, description: "用二年级水平讲解的精炼解析" },
+              difficulty: { type: Type.STRING, enum: ["简单", "中等", "困难"], description: "难度等级" },
+            },
+            required: ["question", "answer", "steps", "explanation", "difficulty"],
+          },
+        },
+      },
+    });
+
+    return JSON.parse(response.text || "[]") as Variation[];
+  },
+};
