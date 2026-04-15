@@ -3,17 +3,13 @@ import { OCRResult, Variation } from "../types";
 
 const getAI = () => {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === "undefined" || apiKey === "MY_GEMINI_API_KEY" || apiKey === "") {
-    throw new Error("Gemini API Key 未配置或无效。请在环境变量中设置 GEMINI_API_KEY。");
-  }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: apiKey || '' });
 };
 
 export const aiService = {
   async recognizeQuestion(base64Image: string, mimeType: string): Promise<OCRResult> {
     try {
       const ai = getAI();
-      console.log("Starting OCR with gemini-2.0-flash-exp...");
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash-exp",
         contents: [
@@ -61,15 +57,14 @@ export const aiService = {
       console.log("OCR successful");
       return JSON.parse(response.text) as OCRResult;
     } catch (error: any) {
-      console.error("OCR Error Details:", error);
-      throw new Error(error.message || "识别失败，请检查网络或 API Key 配置。");
+      console.error("OCR Error:", error);
+      throw new Error(error.message || "识别失败，请稍后重试。");
     }
   },
 
   async generateVariations(originalQuestion: string, knowledgePoint: string): Promise<Variation[]> {
     try {
       const ai = getAI();
-      console.log("Starting variation generation with gemini-2.0-flash-exp...");
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash-exp",
         contents: [
@@ -127,8 +122,8 @@ export const aiService = {
       console.log("Variation generation successful");
       return JSON.parse(response.text) as Variation[];
     } catch (error: any) {
-      console.error("Generation Error Details:", error);
-      throw new Error(error.message || "生成失败，请检查网络或 API Key 配置。");
+      console.error("Generation Error:", error);
+      throw new Error(error.message || "生成失败，请稍后重试。");
     }
   },
 };

@@ -82,7 +82,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'recognition' | 'notebook'>('recognition');
   const [questions, setQuestions] = useState<WrongQuestion[]>([]);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   // Auth Listener
   useEffect(() => {
@@ -132,22 +131,12 @@ export default function App() {
   }, []);
 
   const handleLogin = async () => {
-    setAuthError(null);
     try {
       const provider = new GoogleAuthProvider();
       // 使用 signInWithPopup，如果是在 iframe 中可能会有问题，但在 Vercel 独立域名下通常 OK
       await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error("Login failed", err);
-      let msg = "登录失败，请稍后重试。";
-      if (err.code === 'auth/unauthorized-domain') {
-        msg = "当前域名未在 Firebase 控制台中获得授权。请将您的 Vercel 域名添加到 Firebase Authentication 的“授权网域”列表中。";
-      } else if (err.code === 'auth/popup-blocked') {
-        msg = "登录窗口被浏览器拦截，请允许弹出窗口后重试。";
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        msg = "登录窗口被关闭，请重试。";
-      }
-      setAuthError(msg);
     }
   };
 
@@ -176,17 +165,6 @@ export default function App() {
           <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" referrerPolicy="no-referrer" />
           使用 Google 账号登录
         </button>
-
-        {authError && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm flex items-start gap-3 max-w-xs"
-          >
-            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-            <p>{authError}</p>
-          </motion.div>
-        )}
       </div>
     );
   }
@@ -195,7 +173,7 @@ export default function App() {
     <ErrorBoundary>
       <div className="min-h-screen bg-slate-50 pb-24">
         {/* Header */}
-        <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-bottom border-slate-200 px-6 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <BookOpen className="w-5 h-5 text-white" />
@@ -219,12 +197,12 @@ export default function App() {
           {activeTab === 'recognition' ? (
             <RecognitionPage user={user} />
           ) : (
-            <NotebookPage questions={questions} />
+            <NotebookPage questions={questions} user={user} />
           )}
         </main>
 
         {/* Bottom Nav */}
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-top border-slate-200 px-6 py-3 flex justify-around items-center">
+        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 flex justify-around items-center shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
           <NavButton 
             active={activeTab === 'recognition'} 
             onClick={() => setActiveTab('recognition')}
@@ -662,11 +640,36 @@ function RecognitionPage({ user }: { user: User }) {
   );
 }
 
-function NotebookPage({ questions }: { questions: WrongQuestion[] }) {
+function NotebookPage({ questions, user }: { questions: WrongQuestion[], user: User }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isPrinting, setIsPrinting] = useState(false);
   const [viewingQuestion, setViewingQuestion] = useState<WrongQuestion | null>(null);
+  const [isAddingManual, setIsAddingManual] = useState(false);
+  const [manualQuestion, setManualQuestion] = useState({
+    text: '',
+    knowledgePoint: '',
+    correctAnswer: '',
+  });
   const printRef = useRef<HTMLDivElement>(null);
+
+  const handleManualSave = async () => {
+    if (!manualQuestion.text || !manualQuestion.knowledgePoint) return;
+    try {
+      const questionData: Omit<WrongQuestion, 'id'> = {
+        userId: user.uid,
+        originalQuestion: manualQuestion.text,
+        knowledgePoint: manualQuestion.knowledgePoint,
+        correctAnswer: manualQuestion.correctAnswer,
+        variations: [],
+        createdAt: new Date().toISOString()
+      };
+      await addDoc(collection(db, 'wrongQuestions'), questionData);
+      setIsAddingManual(false);
+      setManualQuestion({ text: '', knowledgePoint: '', correctAnswer: '' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'wrongQuestions');
+    }
+  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => 
@@ -684,7 +687,8 @@ function NotebookPage({ questions }: { questions: WrongQuestion[] }) {
 
   const deleteQuestion = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("确定要删除这条记录吗？")) return;
+    // 使用简单的状态来处理删除确认，或者直接删除（如果用户不喜欢确认弹窗）
+    // 这里我们先直接删除，或者可以加一个更现代的 UI
     try {
       await deleteDoc(doc(db, 'wrongQuestions', id));
     } catch (error) {
@@ -754,14 +758,23 @@ function NotebookPage({ questions }: { questions: WrongQuestion[] }) {
             {selectedIds.length > 0 ? `已选 ${selectedIds.length} 项` : "全选"}
           </span>
         </div>
-        <button 
-          onClick={generatePDF}
-          disabled={selectedIds.length === 0 || isPrinting}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-100 disabled:opacity-50 transition-all active:scale-95"
-        >
-          {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-          导出 PDF
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsAddingManual(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            手动添加
+          </button>
+          <button 
+            onClick={generatePDF}
+            disabled={selectedIds.length === 0 || isPrinting}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-100 disabled:opacity-50 transition-all active:scale-95"
+          >
+            {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+            导出 PDF
+          </button>
+        </div>
       </div>
 
       {/* List */}
@@ -815,6 +828,65 @@ function NotebookPage({ questions }: { questions: WrongQuestion[] }) {
           ))
         )}
       </div>
+
+      {/* Manual Add Modal */}
+      <AnimatePresence>
+        {isAddingManual && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4"
+            >
+              <h3 className="text-xl font-bold text-slate-900">手动添加错题</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase">题目内容</label>
+                  <textarea 
+                    value={manualQuestion.text}
+                    onChange={(e) => setManualQuestion({...manualQuestion, text: e.target.value})}
+                    className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none min-h-[100px]"
+                    placeholder="请输入题目内容..."
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase">知识点</label>
+                  <input 
+                    value={manualQuestion.knowledgePoint}
+                    onChange={(e) => setManualQuestion({...manualQuestion, knowledgePoint: e.target.value})}
+                    className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="例如：加减法"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase">正确答案</label>
+                  <input 
+                    value={manualQuestion.correctAnswer}
+                    onChange={(e) => setManualQuestion({...manualQuestion, correctAnswer: e.target.value})}
+                    className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="请输入答案..."
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => setIsAddingManual(false)}
+                  className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={handleManualSave}
+                  className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all"
+                >
+                  保存
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Detail Modal */}
       <AnimatePresence>
