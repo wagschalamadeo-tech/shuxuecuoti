@@ -273,7 +273,9 @@ function VariationCard({ v, index, showDefault = false }: { v: Variation, index:
                 {v.steps.map((step, sIdx) => (
                   <div key={sIdx} className="flex gap-2 text-sm text-slate-600">
                     <span className="text-blue-400 font-bold">{sIdx + 1}.</span>
-                    <p>{step}</p>
+                    <div className="whitespace-pre-wrap">
+                      <ReactMarkdown>{step}</ReactMarkdown>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -336,7 +338,12 @@ function VariationCardDetail({ v, index }: { v: Variation, index: number }) {
               <p className="text-[10px] font-bold text-slate-400 uppercase">解题步骤</p>
               <div className="space-y-1">
                 {v.steps.map((step, sIdx) => (
-                  <p key={sIdx} className="text-xs text-slate-600">{sIdx + 1}. {step}</p>
+                  <div key={sIdx} className="flex gap-2 text-xs text-slate-600">
+                    <span className="text-blue-400 font-bold">{sIdx + 1}.</span>
+                    <div className="whitespace-pre-wrap">
+                      <ReactMarkdown>{step}</ReactMarkdown>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -909,7 +916,12 @@ function NotebookPage({ questions }: { questions: WrongQuestion[] }) {
                       <p className="text-xs font-bold text-gray-500 mb-2">解题步骤：</p>
                       <div className="space-y-1 mb-3">
                         {v.steps.map((step, sIdx) => (
-                          <p key={sIdx} className="text-xs text-gray-700">{sIdx + 1}. {step}</p>
+                          <div key={sIdx} className="flex gap-2 text-xs text-gray-700">
+                            <span className="font-bold">{sIdx + 1}.</span>
+                            <div className="whitespace-pre-wrap">
+                              <ReactMarkdown>{step}</ReactMarkdown>
+                            </div>
+                          </div>
                         ))}
                       </div>
                       <p className="text-sm font-bold mb-2">最终答案：{v.answer}</p>
