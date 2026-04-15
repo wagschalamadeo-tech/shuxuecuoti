@@ -82,6 +82,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'recognition' | 'notebook'>('recognition');
   const [questions, setQuestions] = useState<WrongQuestion[]>([]);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Auth Listener
   useEffect(() => {
@@ -131,11 +132,22 @@ export default function App() {
   }, []);
 
   const handleLogin = async () => {
+    setAuthError(null);
     try {
       const provider = new GoogleAuthProvider();
+      // 使用 signInWithPopup，如果是在 iframe 中可能会有问题，但在 Vercel 独立域名下通常 OK
       await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login failed", error);
+    } catch (err: any) {
+      console.error("Login failed", err);
+      let msg = "登录失败，请稍后重试。";
+      if (err.code === 'auth/unauthorized-domain') {
+        msg = "当前域名未在 Firebase 控制台中获得授权。请将您的 Vercel 域名添加到 Firebase Authentication 的“授权网域”列表中。";
+      } else if (err.code === 'auth/popup-blocked') {
+        msg = "登录窗口被浏览器拦截，请允许弹出窗口后重试。";
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        msg = "登录窗口被关闭，请重试。";
+      }
+      setAuthError(msg);
     }
   };
 
@@ -164,6 +176,17 @@ export default function App() {
           <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" referrerPolicy="no-referrer" />
           使用 Google 账号登录
         </button>
+
+        {authError && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm flex items-start gap-3 max-w-xs"
+          >
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <p>{authError}</p>
+          </motion.div>
+        )}
       </div>
     );
   }
@@ -180,6 +203,13 @@ export default function App() {
             <span className="font-bold text-slate-900">错题打印机</span>
           </div>
           <div className="flex items-center gap-3">
+            <button 
+              onClick={() => auth.signOut()}
+              className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+              title="退出登录"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
             <img src={user.photoURL || ''} className="w-8 h-8 rounded-full border border-slate-200" alt="Avatar" referrerPolicy="no-referrer" />
           </div>
         </header>
@@ -378,6 +408,7 @@ function RecognitionPage({ user }: { user: User }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -395,13 +426,14 @@ function RecognitionPage({ user }: { user: User }) {
 
   const processOCR = async (base64: string, mimeType: string) => {
     setIsProcessing(true);
+    setError(null);
     setOcrResult(null);
     setVariations([]);
     try {
       const result = await aiService.recognizeQuestion(base64, mimeType);
       setOcrResult(result);
-    } catch (error) {
-      console.error("OCR failed", error);
+    } catch (err: any) {
+      setError(err.message || "识别失败");
     } finally {
       setIsProcessing(false);
     }
@@ -410,11 +442,12 @@ function RecognitionPage({ user }: { user: User }) {
   const generateVariations = async () => {
     if (!ocrResult) return;
     setIsGenerating(true);
+    setError(null);
     try {
       const result = await aiService.generateVariations(ocrResult.text, ocrResult.knowledgePoint);
       setVariations(result);
-    } catch (error) {
-      console.error("Generation failed", error);
+    } catch (err: any) {
+      setError(err.message || "生成变式题失败");
     } finally {
       setIsGenerating(false);
     }
@@ -447,6 +480,18 @@ function RecognitionPage({ user }: { user: User }) {
 
   return (
     <div className="space-y-6">
+      {/* Error Message */}
+      {error && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm flex items-center gap-2"
+        >
+          <AlertCircle className="w-4 h-4" />
+          {error}
+        </motion.div>
+      )}
+
       {/* Upload Section */}
       <div className="bg-white rounded-3xl p-4 border border-slate-200 flex flex-col items-center justify-center gap-4 relative overflow-hidden min-h-[240px]">
         {image ? (
